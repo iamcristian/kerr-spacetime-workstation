@@ -30,10 +30,12 @@ Following the analytical derivations of **Bardeen, Press, & Teukolsky (1972)**, 
 * **Static Limit / Ergosphere Boundary ($r_{\text{ergo}}$):**
   $$r_{\text{ergo}}(\theta) = M + \sqrt{M^2 - a^2\cos^2\theta}$$
 * **Prograde & Retrograde Photon Sphere Orbits ($r_{\text{ph}}^\pm$):**
-  $$r_{\text{ph}}^\pm = 2M \left\{ 1 + \cos\left[ \frac{2}{3}\arccos\left(\mp a_*\right) \right] \right\}$$
+  $$r_{\text{ph}}^\pm = 2M \{ 1 + \cos[ \frac{2}{3}\arccos(\mp a_*) ] \}$$
 * **Innermost Stable Circular Orbit ($r_{\text{ISCO}}^\pm$):**
   $$r_{\text{ISCO}} = M \left( 3 + Z_2 \mp \sqrt{(3 - Z_1)(3 + Z_1 + 2Z_2)} \right)$$
   with $Z_1 = 1 + (1 - a_*^2)^{1/3}\left[(1 + a_*)^{1/3} + (1 - a_*)^{1/3}\right]$ and $Z_2 = \sqrt{3a_*^2 + Z_1^2}$.
+
+  
 
 ### 3. Novikov-Thorne Thin Accretion Disk & Liouville Invariant
 The accretion disk shader implements the relativistic thin-disk temperature and flux profile $F(r)$ vanishing at the boundary $r = r_{\text{ISCO}}$. Observed specific intensity $I_{\text{obs}}$ is computed via Liouville's theorem along null rays:
