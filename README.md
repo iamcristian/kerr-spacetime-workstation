@@ -9,6 +9,9 @@ An interactive, single-file numerical relativity and astrophysical radiative tra
 
 Designed for researchers, physicists, and graduate students, this simulator evaluates the exact **Boyer-Lindquist metric tensor** for an axisymmetric rotating black hole (Kerr spacetime), integrates timelike and null geodesics via a 4th-order Runge-Kutta (RK4) solver, and models relativistic accretion disk emission using the **Novikov-Thorne** thin-disk formalism.
 
+<img width="1864" height="993" alt="{2FBA0400-C999-4937-84C4-92A67AFEBC72}" src="https://github.com/user-attachments/assets/8786aeec-e473-48bf-b267-e9ca2df78c3d" />
+
+
 ---
 
 ## Key Features & Physical Formalism
