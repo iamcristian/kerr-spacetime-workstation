@@ -116,22 +116,3 @@ python3 -m http.server 8080
 
 # Or using Node.js (npx)
 npx serve .
-```
-Then navigate to `http://localhost:8080` in your browser.
-
----
-
-## Literature & Mathematical References
-
-1. **Boyer, R. H., & Lindquist, R. W. (1967).** *Maximal Analytic Extension of the Kerr Metric.* Journal of Mathematical Physics, 8(2), 265–281.
-2. **Bardeen, J. M., Press, W. H., & Teukolsky, S. A. (1972).** *Rotating Black Holes: Locally Nonrotating Frames, Energy Extraction, and Scalar Synchrotron Radiation.* The Astrophysical Journal, 178, 347–370.
-3. **Novikov, I. D., & Thorne, K. S. (1973).** *Astrophysics of Black Holes.* In *Black Holes (Les Astres Occlus)*, pp. 343–450.
-4. **Page, D. N., & Thorne, K. S. (1974).** *Disk-Accretion onto a Black Hole. Time-Averaged Structure of Accretion Disk.* The Astrophysical Journal, 191, 499–506.
-5. **Blandford, R. D., & Znajek, R. L. (1977).** *Electromagnetic extraction of energy from Kerr black holes.* Monthly Notices of the Royal Astronomical Society, 179(3), 433–456.
-6. **Event Horizon Telescope Collaboration (2019).** *First M87 Event Horizon Telescope Results. I. The Shadow of the Supermassive Black Hole.* The Astrophysical Journal Letters, 875(1), L1.
-
----
-
-## License
-
-Distributed under the **MIT License**. See `LICENSE` for more information.
