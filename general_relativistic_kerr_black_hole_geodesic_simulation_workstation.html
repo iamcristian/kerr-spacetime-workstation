@@ -1,0 +1,2275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KERR-GRRMHD // Boyer-Lindquist Spacetime & Geodesic Integrator</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter (UI), STIX Two Text (Mathematical Serif), JetBrains Mono (Tabular Numerics) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;0,700;1,400;1,600&display=swap" rel="stylesheet">
+
+  <!-- Import Map: Three.js r160 & GSAP 3.12.5 -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+        "gsap": "https://unpkg.com/gsap@3.12.5/index.js"
+      }
+    }
+  </script>
+
+  <style>
+    :root {
+      --bg-obsidian: #090A0D;
+      --surface-panel: rgba(17, 19, 24, 0.96);
+      --surface-elevated: #181B22;
+      --border-hairline: #262932;
+      --border-input: #2E323D;
+      --text-primary: #F3F4F6;
+      --text-secondary: #9CA3AF;
+      --text-muted: #6B7280;
+      --accent-steel: #3B82F6;
+      --accent-amber: #D97706;
+      --accent-blueshift: #60A5FA;
+      --accent-redshift: #F87171;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-obsidian);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: var(--text-primary);
+      font-size: 12px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .math-serif {
+      font-family: 'STIX Two Text', 'Times New Roman', serif;
+    }
+
+    .mono-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Viewport & Renderer Layers */
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    #css2d-layer {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* Docked Workstation Architecture */
+    .workstation-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 38px;
+      background-color: #111318;
+      border-bottom: 1px solid var(--border-hairline);
+      z-index: 30;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+    }
+
+    .dock-left {
+      position: fixed;
+      top: 38px;
+      left: 0;
+      bottom: 28px;
+      width: 310px;
+      background-color: var(--surface-panel);
+      border-right: 1px solid var(--border-hairline);
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .dock-right {
+      position: fixed;
+      top: 38px;
+      right: 0;
+      bottom: 28px;
+      width: 340px;
+      background-color: var(--surface-panel);
+      border-left: 1px solid var(--border-hairline);
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .status-footer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 28px;
+      background-color: #111318;
+      border-top: 1px solid var(--border-hairline);
+      z-index: 30;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10.5px;
+      color: var(--text-secondary);
+    }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0D0F14;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #2E323D;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #4B5563;
+    }
+
+    /* Section Headers & Dividers */
+    .section-header {
+      padding: 8px 12px;
+      background-color: #151820;
+      border-top: 1px solid var(--border-hairline);
+      border-bottom: 1px solid var(--border-hairline);
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .section-header:first-child {
+      border-top: none;
+    }
+
+    .section-body {
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+
+    /* Scientific Controls, Buttons & Inputs */
+    .sci-btn {
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 4px 9px;
+      border-radius: 3px;
+      background-color: var(--surface-elevated);
+      border: 1px solid var(--border-input);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+
+    .sci-btn:hover {
+      background-color: #222630;
+      color: var(--text-primary);
+      border-color: #4B5563;
+    }
+
+    .sci-btn.active {
+      background-color: #262B38;
+      color: #FFFFFF;
+      border-color: #9CA3AF;
+    }
+
+    .sci-btn.primary-action {
+      background-color: #1E293B;
+      border-color: #3B82F6;
+      color: #F3F4F6;
+    }
+
+    .sci-btn.primary-action:hover {
+      background-color: #2563EB;
+      color: #FFFFFF;
+    }
+
+    .sci-select {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10.5px;
+      padding: 3px 8px;
+      border-radius: 3px;
+      background-color: var(--surface-elevated);
+      border: 1px solid var(--border-input);
+      color: var(--text-primary);
+      outline: none;
+      cursor: pointer;
+    }
+
+    .sci-select:focus {
+      border-color: #6B7280;
+    }
+
+    /* High-Precision Range Sliders */
+    input[type="range"].sci-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 3px;
+      background: #262932;
+      border-radius: 1px;
+      outline: none;
+    }
+
+    input[type="range"].sci-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 10px;
+      height: 12px;
+      border-radius: 2px;
+      background: #E5E7EB;
+      border: 1px solid #111318;
+      cursor: ew-resize;
+    }
+
+    input[type="range"].sci-slider::-webkit-slider-thumb:hover {
+      background: #FFFFFF;
+    }
+
+    /* Mathematical Matrix Brackets for Metric Tensor g_uv */
+    .matrix-container {
+      position: relative;
+      padding: 6px 10px;
+      background-color: #0C0E12;
+      border: 1px solid var(--border-hairline);
+      border-radius: 3px;
+    }
+
+    .matrix-brackets {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 3px 6px;
+      padding: 4px 8px;
+      text-align: right;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+    }
+
+    .matrix-brackets::before,
+    .matrix-brackets::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 5px;
+      border: 1px solid #9CA3AF;
+    }
+
+    .matrix-brackets::before {
+      left: 0;
+      border-right: none;
+    }
+
+    .matrix-brackets::after {
+      right: 0;
+      border-left: none;
+    }
+
+    /* Data Table Rows */
+    .data-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 3.5px 0;
+      border-bottom: 1px solid rgba(38, 41, 50, 0.55);
+      font-size: 11px;
+    }
+
+    .data-row:last-child {
+      border-bottom: none;
+    }
+
+    /* CSS2D LaTeX Figure Callouts */
+    .latex-annotation {
+      position: relative;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+
+    .latex-anchor {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background-color: #F3F4F6;
+      border: 1px solid #090A0D;
+      position: absolute;
+      left: -2.5px;
+      top: -2.5px;
+    }
+
+    .latex-leader {
+      position: absolute;
+      width: 24px;
+      height: 16px;
+      border-left: 1px solid rgba(229, 231, 235, 0.65);
+      border-top: 1px solid rgba(229, 231, 235, 0.65);
+      left: 0;
+      top: -16px;
+      transform: skewX(-25deg);
+      transform-origin: bottom left;
+    }
+
+    .latex-leader.left-side {
+      left: auto;
+      right: 0;
+      border-left: none;
+      border-right: 1px solid rgba(229, 231, 235, 0.65);
+      transform: skewX(25deg);
+      transform-origin: bottom right;
+    }
+
+    .latex-tag {
+      position: absolute;
+      left: 28px;
+      top: -28px;
+      background-color: rgba(12, 14, 18, 0.92);
+      border: 1px solid #2E323D;
+      padding: 3px 7px;
+      border-radius: 2px;
+      white-space: nowrap;
+      color: #F3F4F6;
+      font-size: 10.5px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+    }
+
+    .latex-tag.left-side {
+      left: auto;
+      right: 28px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Three.js WebGL Scientific Viewport -->
+  <div id="canvas-container"></div>
+
+  <!-- CSS2DRenderer Figure Annotations Layer -->
+  <div id="css2d-layer"></div>
+
+  <!-- Clipboard Notification Toast -->
+  <div id="sci-toast" class="fixed top-12 left-1/2 -translate-x-1/2 z-50 px-3.5 py-1.5 rounded bg-[#181B22] border border-[#4B5563] text-[#F3F4F6] mono-num text-[11px] opacity-0 pointer-events-none transition-opacity duration-200 shadow-lg">
+    STATE TENSOR & GEODESIC TELEMETRY COPIED TO CLIPBOARD (JSON)
+  </div>
+
+  <!-- ==========================================================================
+       TOP WORKSTATION HEADER BAR (38px HEIGHT)
+       ========================================================================== -->
+  <header class="workstation-header">
+    <!-- Left: Institutional Title & Metric Signature -->
+    <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-[#E5E7EB]"></span>
+        <span class="font-semibold tracking-tight text-[11.5px] text-[#F3F4F6]">KERR-GRRMHD</span>
+        <span class="text-[#6B7280]">/</span>
+        <span class="text-[11px] text-[#9CA3AF] hidden sm:inline">Boyer-Lindquist Spacetime &amp; Geodesic Integrator</span>
+      </div>
+      <span class="hidden xl:inline-block px-1.5 py-0.5 text-[10px] mono-num bg-[#181B22] border border-[#262932] text-[#9CA3AF] rounded">
+        g<sub>μν</sub> (−,+,+,+) · G = c = 1
+      </span>
+    </div>
+
+    <!-- Center: Empirical Target Catalog & Radiative Colormap Selector -->
+    <div class="flex items-center gap-2">
+      <div class="flex items-center gap-1.5">
+        <label for="select-target" class="text-[10.5px] text-[#9CA3AF] hidden md:inline">Target:</label>
+        <select id="select-target" class="sci-select">
+          <option value="m87" selected>M87* (a* = 0.900, 6.5×10⁹ M☉)</option>
+          <option value="sgra">Sgr A* (a* = 0.500, 4.15×10⁶ M☉)</option>
+          <option value="cygx1">Cygnus X-1 (a* = 0.998, 21.2 M☉)</option>
+          <option value="gw150914">GW150914 Remnant (a* = 0.680, 62 M☉)</option>
+          <option value="schwarzschild">Schwarzschild Limit (a* = 0.000)</option>
+        </select>
+      </div>
+
+      <div class="h-4 w-px bg-[#262932] hidden sm:block"></div>
+
+      <div class="flex items-center gap-1.5">
+        <label for="select-colormap" class="text-[10.5px] text-[#9CA3AF] hidden lg:inline">Radiative Transfer Map:</label>
+        <select id="select-colormap" class="sci-select">
+          <option value="0" selected>0: EHT 230 GHz Synchrotron (Hot-Iron)</option>
+          <option value="1">1: Planckian Blackbody (3000K–18000K)</option>
+          <option value="2">2: Bolometric Monochrome Intensity I_ν</option>
+          <option value="3">3: Relativistic Doppler Factor g-Map</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Right: Inspection Controls & Data Export -->
+    <div class="flex items-center gap-1.5">
+      <button id="btn-decompose" class="sci-btn" title="Separate manifold layers along polar axis">
+        <span id="btn-decompose-label">Decompose Manifold</span>
+      </button>
+      <button id="btn-toggle-annotations" class="sci-btn active" title="Toggle 3D LaTeX figure callouts">
+        Labels
+      </button>
+      <button id="btn-toggle-docks" class="sci-btn active" title="Toggle left/right docked panels">
+        Panels
+      </button>
+      <button id="btn-export-json" class="sci-btn primary-action" title="Export exact metric & geodesic state to JSON">
+        Export JSON
+      </button>
+    </div>
+  </header>
+
+  <!-- ==========================================================================
+       LEFT DOCKED PANEL (310px): HAMILTONIAN, METRIC & GEODESIC INITIAL CONDITIONS
+       ========================================================================== -->
+  <aside id="dock-left" class="dock-left">
+    <!-- Section 1: Kerr Spacetime Metric Parameters -->
+    <div class="section-header">
+      <span>1. Kerr Metric Parameters</span>
+      <span class="mono-num text-[9.5px] text-[#9CA3AF]">R<sub>μν</sub> = 0</span>
+    </div>
+    <div class="section-body">
+      <!-- Dimensionless Spin Parameter a* = J/M^2 -->
+      <div>
+        <div class="flex justify-between items-baseline mb-1">
+          <label for="slider-spin" class="text-[11px] text-[#9CA3AF]">
+            Dimensionless Spin <span class="math-serif italic text-[#F3F4F6]">a<sub>*</sub> = J / M<sup>2</sup></span>
+          </label>
+          <span id="val-spin" class="mono-num text-[11px] font-semibold text-[#F3F4F6]">0.900</span>
+        </div>
+        <input id="slider-spin" type="range" min="0.000" max="0.998" step="0.001" value="0.900" class="sci-slider" />
+        <div class="flex justify-between text-[9.5px] mono-num text-[#6B7280] mt-0.5">
+          <span>0.000 (Static)</span>
+          <span>0.998 (Thorne Limit)</span>
+        </div>
+      </div>
+
+      <!-- Mass log10(M / M_sun) -->
+      <div>
+        <div class="flex justify-between items-baseline mb-1">
+          <label for="slider-mass" class="text-[11px] text-[#9CA3AF]">
+            ADM Mass <span class="math-serif italic text-[#F3F4F6]">M / M<sub>☉</sub></span>
+          </label>
+          <span id="val-mass" class="mono-num text-[11px] font-semibold text-[#F3F4F6]">6.50×10⁹ M☉</span>
+        </div>
+        <input id="slider-mass" type="range" min="1.00" max="10.20" step="0.02" value="9.813" class="sci-slider" />
+      </div>
+
+      <!-- Observer Inclination theta_0 -->
+      <div>
+        <div class="flex justify-between items-baseline mb-1">
+          <label for="slider-inc" class="text-[11px] text-[#9CA3AF]">
+            Observer Inclination <span class="math-serif italic text-[#F3F4F6]">θ<sub>0</sub></span>
+          </label>
+          <span id="val-inc" class="mono-num text-[11px] font-semibold text-[#F3F4F6]">78.0°</span>
+        </div>
+        <input id="slider-inc" type="range" min="5.0" max="89.0" step="0.5" value="78.0" class="sci-slider" />
+      </div>
+
+      <!-- Eddington Mass Accretion Rate m_dot -->
+      <div>
+        <div class="flex justify-between items-baseline mb-1">
+          <label for="slider-mdot" class="text-[11px] text-[#9CA3AF]">
+            Accretion Rate <span class="math-serif italic text-[#F3F4F6]">ṁ = Ṁ / Ṁ<sub>Edd</sub></span>
+          </label>
+          <span id="val-mdot" class="mono-num text-[11px] font-semibold text-[#F3F4F6]">0.180</span>
+        </div>
+        <input id="slider-mdot" type="range" min="0.01" max="1.00" step="0.01" value="0.18" class="sci-slider" />
+      </div>
+
+      <!-- Angular Momentum Orientation (+L Prograde vs -L Retrograde) -->
+      <div class="flex items-center justify-between pt-1">
+        <span class="text-[11px] text-[#9CA3AF]">Disk Orientation <span class="math-serif italic">sgn(L<sub>z</sub>)</span></span>
+        <div class="grid grid-cols-2 gap-1">
+          <button id="btn-prograde" class="sci-btn active">Prograde (+L)</button>
+          <button id="btn-retrograde" class="sci-btn">Retrograde (−L)</button>
+        </div>
+      </div>
+
+      <!-- Relativistic Beaming Toggle -->
+      <div class="flex items-center justify-between pt-0.5">
+        <span class="text-[11px] text-[#9CA3AF]">Liouville Beaming <span class="math-serif italic">I<sub>obs</sub> = g<sup>4</sup>I<sub>em</sub></span></span>
+        <button id="btn-doppler" class="sci-btn active">Enabled (g⁴)</button>
+      </div>
+    </div>
+
+    <!-- Section 2: RK4 Geodesic Integrator & Orbital Regimes -->
+    <div class="section-header">
+      <span>2. Geodesic Initial Conditions</span>
+      <span id="orbit-regime-badge" class="mono-num text-[9.5px] text-[#60A5FA]">BOUND PRECESSED</span>
+    </div>
+    <div class="section-body">
+      <!-- Preset Orbital Regimes -->
+      <div>
+        <label for="select-orbit-preset" class="block text-[10.5px] text-[#9CA3AF] mb-1">Canonical Orbital Regime:</label>
+        <select id="select-orbit-preset" class="sci-select w-full">
+          <option value="precessed" selected>Relativistic Apsidal Precession (Bound)</option>
+          <option value="isco_pro">Marginally Stable Circular Orbit (Prograde ISCO)</option>
+          <option value="isco_retro">Marginally Stable Circular Orbit (Retrograde ISCO)</option>
+          <option value="zoom_whirl">Zoom-Whirl Homoclinic Separatrix Orbit</option>
+          <option value="hyperbolic">Unbound Hyperbolic Gravitational Deflection</option>
+          <option value="plunge">Direct Horizon Capture Geodesic (r → r₊)</option>
+        </select>
+      </div>
+
+      <!-- Initial Coordinate Radius r_0 / M -->
+      <div>
+        <div class="flex justify-between items-baseline mb-1">
+          <span class="text-[11px] text-[#9CA3AF]">Initial Radius <span class="math-serif italic text-[#F3F4F6]">r<sub>0</sub> / M</span></span>
+          <span id="val-r0" class="mono-num text-[11px] font-semibold text-[#F3F4F6]">8.50 M</span>
+        </div>
+        <input id="slider-r0" type="range" min="1.80" max="22.0" step="0.05" value="8.50" class="sci-slider" />
+      </div>
+
+      <!-- Specific Angular Momentum L_z / M -->
+      <div>
+        <div class="flex justify-between items-baseline mb-1">
+          <span class="text-[11px] text-[#9CA3AF]">Angular Momentum <span class="math-serif italic text-[#F3F4F6]">L<sub>z</sub> / M</span></span>
+          <span id="val-lz" class="mono-num text-[11px] font-semibold text-[#F3F4F6]">3.45 M</span>
+        </div>
+        <input id="slider-lz" type="range" min="1.20" max="5.40" step="0.02" value="3.45" class="sci-slider" />
+      </div>
+
+      <!-- Relativistic Eccentricity Parameter e_rel -->
+      <div>
+        <div class="flex justify-between items-baseline mb-1">
+          <span class="text-[11px] text-[#9CA3AF]">Radial Kick Parameter <span class="math-serif italic text-[#F3F4F6]">e<sub>rel</sub></span></span>
+          <span id="val-ecc" class="mono-num text-[11px] font-semibold text-[#F3F4F6]">0.28</span>
+        </div>
+        <input id="slider-ecc" type="range" min="0.00" max="0.85" step="0.01" value="0.28" class="sci-slider" />
+      </div>
+
+      <!-- Integration Time Step Speed d_tau -->
+      <div>
+        <div class="flex justify-between items-baseline mb-1">
+          <span class="text-[11px] text-[#9CA3AF]">Proper Time Rate <span class="math-serif italic text-[#F3F4F6]">dτ / dt<sub>wall</sub></span></span>
+          <span id="val-timescale" class="mono-num text-[11px] font-semibold text-[#F3F4F6]">1.00×</span>
+        </div>
+        <input id="slider-timescale" type="range" min="0.00" max="3.00" step="0.05" value="1.00" class="sci-slider" />
+      </div>
+
+      <div class="grid grid-cols-2 gap-1.5 pt-1">
+        <button id="btn-integrate-reset" class="sci-btn primary-action">Re-Initialize x<sup>μ</sup>(0)</button>
+        <button id="btn-pause-sim" class="sci-btn">Pause dτ</button>
+      </div>
+    </div>
+
+    <!-- Section 3: Geometric Manifold & Camera Projections -->
+    <div class="section-header">
+      <span>3. Manifold Wireframes &amp; Views</span>
+      <span class="mono-num text-[9.5px] text-[#9CA3AF]">3D LAYERS</span>
+    </div>
+    <div class="section-body">
+      <div class="grid grid-cols-2 gap-1.5">
+        <button id="toggle-ergosphere" class="sci-btn active">Ergosphere r<sub>ergo</sub>(θ)</button>
+        <button id="toggle-photon-sphere" class="sci-btn active">ISCO &amp; r<sub>ph</sub> Rings</button>
+        <button id="toggle-jets" class="sci-btn active">BZ Polar Sheath</button>
+        <button id="toggle-flamm" class="sci-btn active">Flamm Embedding</button>
+      </div>
+
+      <div class="pt-1">
+        <span class="block text-[10.5px] text-[#9CA3AF] mb-1.5">Standard Camera Projections:</span>
+        <div class="grid grid-cols-2 gap-1.5">
+          <button data-cam="default" class="cam-btn sci-btn active">Oblique (θ₀=78°)</button>
+          <button data-cam="edge" class="cam-btn sci-btn">Equatorial (θ₀=86°)</button>
+          <button data-cam="polar" class="cam-btn sci-btn">Polar Axis (θ₀=5°)</button>
+          <button data-cam="flamm" class="cam-btn sci-btn">Flamm Paraboloid</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ==========================================================================
+       RIGHT DOCKED PANEL (340px): LIVE METRIC TENSOR g_uv, HORIZONS & PHASE PLOT
+       ========================================================================== -->
+  <aside id="dock-right" class="dock-right">
+    <!-- Section 1: Instantaneous Covariant Metric Tensor Matrix g_uv(r, theta) -->
+    <div class="section-header">
+      <span>1. Covariant Metric Tensor <span class="math-serif italic">g<sub>μν</sub>(r, θ)</span></span>
+      <span id="tensor-eval-coords" class="mono-num text-[9.5px] text-[#9CA3AF]">at r = 8.50M</span>
+    </div>
+    <div class="section-body">
+      <div class="matrix-container">
+        <div class="flex justify-between text-[9.5px] mono-num text-[#6B7280] mb-1 px-2">
+          <span>μ \ ν</span>
+          <span>t</span>
+          <span>r</span>
+          <span>θ</span>
+          <span>φ</span>
+        </div>
+        <div class="matrix-brackets">
+          <!-- Row t -->
+          <span id="g-tt" class="text-[#F87171]">-0.764</span>
+          <span class="text-[#6B7280]">0.000</span>
+          <span class="text-[#6B7280]">0.000</span>
+          <span id="g-tphi" class="text-[#60A5FA]">-0.212</span>
+          <!-- Row r -->
+          <span class="text-[#6B7280]">0.000</span>
+          <span id="g-rr" class="text-[#F3F4F6]">+1.298</span>
+          <span class="text-[#6B7280]">0.000</span>
+          <span class="text-[#6B7280]">0.000</span>
+          <!-- Row theta -->
+          <span class="text-[#6B7280]">0.000</span>
+          <span class="text-[#6B7280]">0.000</span>
+          <span id="g-thth" class="text-[#F3F4F6]">+72.25</span>
+          <span class="text-[#6B7280]">0.000</span>
+          <!-- Row phi -->
+          <span id="g-phit" class="text-[#60A5FA]">-0.212</span>
+          <span class="text-[#6B7280]">0.000</span>
+          <span class="text-[#6B7280]">0.000</span>
+          <span id="g-phiphi" class="text-[#F3F4F6]">+73.24</span>
+        </div>
+      </div>
+      <div class="text-[10px] mono-num text-[#9CA3AF] leading-relaxed bg-[#0C0E12] p-2 rounded border border-[#262932]">
+        <span class="text-[#F3F4F6]">ds²</span> = g<sub>tt</sub>dt² + 2g<sub>tφ</sub>dtdφ + g<sub>rr</sub>dr² + g<sub>θθ</sub>dθ² + g<sub>φφ</sub>dφ²<br/>
+        <span class="text-[#6B7280]">Σ = r² + a²cos²θ,  Δ = r² − 2Mr + a²</span>
+      </div>
+    </div>
+
+    <!-- Section 2: Exact Relativistic Horizons, Radii & Invariants -->
+    <div class="section-header">
+      <span>2. Analytical Horizons &amp; Invariants</span>
+      <span class="mono-num text-[9.5px] text-[#9CA3AF]">EXACT SOLVER</span>
+    </div>
+    <div class="section-body !gap-0.5">
+      <div class="data-row">
+        <span class="text-[#9CA3AF]">Outer Event Horizon <span class="math-serif italic text-[#F3F4F6]">r<sub>+</sub></span></span>
+        <span id="readout-rplus" class="mono-num text-[#F3F4F6]">1.4359 M (1.38×10¹⁰ km)</span>
+      </div>
+      <div class="data-row">
+        <span class="text-[#9CA3AF]">Inner Cauchy Horizon <span class="math-serif italic text-[#F3F4F6]">r<sub>−</sub></span></span>
+        <span id="readout-rminus" class="mono-num text-[#9CA3AF]">0.5641 M (5.41×10⁹ km)</span>
+      </div>
+      <div class="data-row">
+        <span class="text-[#9CA3AF]">Equatorial Static Limit <span class="math-serif italic text-[#F3F4F6]">r<sub>ergo</sub>(π/2)</span></span>
+        <span id="readout-rergo" class="mono-num text-[#F3F4F6]">2.0000 M (1.92×10¹⁰ km)</span>
+      </div>
+      <div class="data-row">
+        <span class="text-[#9CA3AF]">Photon Shell <span class="math-serif italic text-[#F3F4F6]">r<sub>ph</sub><sup>+</sup> / r<sub>ph</sub><sup>−</sup></span></span>
+        <span id="readout-rph" class="mono-num text-[#F3F4F6]">1.5578 M / 3.9103 M</span>
+      </div>
+      <div class="data-row">
+        <span class="text-[#9CA3AF]">ISCO Radius <span class="math-serif italic text-[#F3F4F6]">r<sub>ISCO</sub></span></span>
+        <span id="readout-risco" class="mono-num font-semibold text-[#60A5FA]">2.3209 M (2.23×10¹⁰ km)</span>
+      </div>
+      <div class="data-row">
+        <span class="text-[#9CA3AF]">Shadow Critical Impact <span class="math-serif italic text-[#F3F4F6]">b<sub>c</sub></span></span>
+        <span id="readout-shadow" class="mono-num text-[#F3F4F6]">4.962 M (Asymmetric D)</span>
+      </div>
+      <div class="data-row">
+        <span class="text-[#9CA3AF]">Novikov-Thorne Efficiency <span class="math-serif italic text-[#F3F4F6]">η</span></span>
+        <span id="readout-eta" class="mono-num font-semibold text-[#D97706]">15.51% (0.1551 c²)</span>
+      </div>
+      <div class="data-row">
+        <span class="text-[#9CA3AF]">Horizon Angular Vel. <span class="math-serif italic text-[#F3F4F6]">Ω<sub>H</sub></span></span>
+        <span id="readout-omegah" class="mono-num text-[#F3F4F6]">0.3134 c/M</span>
+      </div>
+      <div class="data-row">
+        <span class="text-[#9CA3AF]">Surface Gravity <span class="math-serif italic text-[#F3F4F6]">κ</span></span>
+        <span id="readout-kappa" class="mono-num text-[#F3F4F6]">0.3036 c²/M</span>
+      </div>
+      <div class="data-row">
+        <span class="text-[#9CA3AF]">Hawking Temperature <span class="math-serif italic text-[#F3F4F6]">T<sub>H</sub></span></span>
+        <span id="readout-th" class="mono-num text-[#9CA3AF]">5.78×10⁻¹⁸ K</span>
+      </div>
+      <div class="data-row">
+        <span class="text-[#9CA3AF]">Blandford-Znajek Power <span class="math-serif italic text-[#F3F4F6]">P<sub>BZ</sub></span></span>
+        <span id="readout-pbz" class="mono-num text-[#F3F4F6]">1.19×10⁴⁵ erg/s</span>
+      </div>
+      <div class="data-row">
+        <span class="text-[#9CA3AF]">Kretschmann Scalar <span class="math-serif italic text-[#F3F4F6]">K(r<sub>+</sub>, π/2)</span></span>
+        <span id="readout-kretschmann" class="mono-num text-[#F87171]">5.492 M⁻⁴</span>
+      </div>
+    </div>
+
+    <!-- Section 3: High-Precision Effective Potential V_eff(r) & Phase Portrait -->
+    <div class="section-header">
+      <span>3. Effective Potential &amp; Phase Portrait</span>
+      <span id="readout-particle-r" class="mono-num text-[9.5px] text-[#F3F4F6]">r = 8.50 M</span>
+    </div>
+    <div class="section-body">
+      <div class="bg-[#090A0D] border border-[#262932] rounded p-1.5">
+        <canvas id="potential-canvas" width="308" height="190" class="w-full h-[190px] block"></canvas>
+      </div>
+      <div class="flex items-center justify-between text-[9.5px] mono-num text-[#9CA3AF]">
+        <span class="flex items-center gap-1"><span class="w-2 h-0.5 bg-[#F87171] inline-block"></span>r₊ Horizon</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-0.5 bg-[#60A5FA] inline-block"></span>r<sub>ISCO</sub></span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-[#F3F4F6] inline-block"></span>x<sup>μ</sup>(τ) State</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ==========================================================================
+       BOTTOM SCIENTIFIC TELEMETRY STATUS BAR (28px HEIGHT)
+       ========================================================================== -->
+  <footer class="status-footer">
+    <div class="flex items-center gap-4">
+      <span>INTEGRATOR: <strong class="text-[#F3F4F6]">RK4 SYMPLECTIC</strong></span>
+      <span class="hidden sm:inline">Δτ = <span id="status-dtau" class="text-[#F3F4F6]">0.0080 M</span></span>
+      <span class="hidden md:inline">HAMILTONIAN VIOLATION |ℋ| = <span id="status-ham-err" class="text-[#60A5FA]">1.42×10⁻⁹</span></span>
+    </div>
+    <div class="flex items-center gap-4">
+      <span>PROPER TIME τ = <span id="status-proper-time" class="text-[#F3F4F6]">0.00 M</span></span>
+      <span class="hidden sm:inline">COORD TIME t = <span id="status-coord-time" class="text-[#F3F4F6]">0.00 M</span></span>
+      <span class="hidden lg:inline">BLOOM: <span class="text-[#9CA3AF]">0.20 / 0.80 (ACESFilmic)</span></span>
+    </div>
+  </footer>
+
+  <!-- ==========================================================================
+       MAIN SCIENTIFIC SIMULATION ENGINE (THREE.JS + GLSL + RK4 + TENSOR SOLVER)
+       ========================================================================== -->
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+    import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+    import gsap from 'gsap';
+
+    // ============================================================================
+    // 1. SCENE, CAMERA & RENDERER INITIALIZATION (STRICT SCIENTIFIC PALETTE)
+    // ============================================================================
+    const container = document.getElementById('canvas-container');
+    const css2dContainer = document.getElementById('css2d-layer');
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x090a0d);
+
+    const camera = new THREE.PerspectiveCamera(
+      40,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      600
+    );
+    camera.position.set(0, 7.2, 34.0);
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: 'high-performance'
+    });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    // Mandatory Photorealistic Color Pipeline: ACESFilmicToneMapping + sRGB
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    if ('outputColorSpace' in renderer) {
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+    }
+
+    container.appendChild(renderer.domElement);
+
+    // CSS2DRenderer for LaTeX-style Figure Annotations
+    const labelRenderer = new CSS2DRenderer();
+    labelRenderer.setSize(window.innerWidth, window.innerHeight);
+    css2dContainer.appendChild(labelRenderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.target.set(0, 0, 0);
+    controls.minDistance = 4.5;
+    controls.maxDistance = 140;
+
+    // Neutral Studio Environment for subtle metallic reference rings
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    pmremGenerator.compileEquirectangularShader();
+    scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+
+    // ============================================================================
+    // 2. POST-PROCESSING PIPELINE (MANDATORY: UnrealBloomPass = 0.2, threshold = 0.8)
+    // ============================================================================
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.2,
+      0.35,
+      0.8
+    );
+    bloomPass.strength = 0.2;
+    bloomPass.threshold = 0.8;
+    bloomPass.radius = 0.35;
+    composer.addPass(bloomPass);
+
+    // ============================================================================
+    // 3. EXACT ANALYTICAL KERR SPACETIME SOLVER (BOYER-LINDQUIST COORDINATES)
+    // ============================================================================
+    const VISUAL_SCALE = 1.6; // 1 G*M/c^2 geometric unit = 1.6 world units
+
+    const physicsState = {
+      spin: 0.900,           // Dimensionless spin parameter a* = J/M^2
+      logMassSolar: 9.813,   // log10(M / M_sun)
+      inclinationDeg: 78.0,  // Observer viewing inclination angle theta_0
+      mdot: 0.18,            // Eddington mass accretion ratio
+      prograde: 1,           // +1 Prograde, -1 Retrograde
+      dopplerEnabled: 1.0,   // Relativistic Liouville g^4 beaming toggle
+      colormapMode: 0,       // 0: EHT 230 GHz, 1: Blackbody, 2: Monochrome I_v, 3: Doppler g-Map
+      timeScale: 1.0,
+      isPaused: false,
+      properTimeTau: 0.0,
+      coordTimeM: 0.0,
+      isDecomposed: false,
+
+      // Derived Exact Relativistic Horizons & Critical Radii
+      rPlus: 1.4359,
+      rMinus: 0.5641,
+      rErgoEq: 2.0000,
+      rPhPro: 1.5578,
+      rPhRetro: 3.9103,
+      rISCO: 2.3209,
+      etaEff: 0.1551,
+      omegaH: 0.3134,
+      kappa: 0.3036,
+      bCrit: 4.962
+    };
+
+    /**
+     * Computes exact analytical Boyer-Lindquist horizons, photon shells,
+     * Bardeen-Press-Teukolsky (1972) ISCO radius, and radiative efficiency.
+     */
+    function computeKerrMetricInvariants() {
+      const a = THREE.MathUtils.clamp(physicsState.spin, 0.0, 0.998);
+      const sgn = physicsState.prograde;
+
+      // 1. Outer Event Horizon r_+ and Inner Cauchy Horizon r_-
+      const rootTerm = Math.sqrt(Math.max(0.0, 1.0 - a * a));
+      physicsState.rPlus = 1.0 + rootTerm;
+      physicsState.rMinus = 1.0 - rootTerm;
+      physicsState.rErgoEq = 2.0;
+
+      // 2. Prograde & Retrograde Circular Photon Orbits
+      physicsState.rPhPro = 2.0 * (1.0 + Math.cos((2.0 / 3.0) * Math.acos(-a)));
+      physicsState.rPhRetro = 2.0 * (1.0 + Math.cos((2.0 / 3.0) * Math.acos(a)));
+
+      // 3. Innermost Stable Circular Orbit (r_ISCO)
+      const oneMinusA2Cbrt = Math.cbrt(1.0 - a * a);
+      const z1 = 1.0 + oneMinusA2Cbrt * (Math.cbrt(1.0 + a) + Math.cbrt(1.0 - a));
+      const z2 = Math.sqrt(3.0 * a * a + z1 * z1);
+      physicsState.rISCO = 3.0 + z2 - sgn * Math.sqrt((3.0 - z1) * (3.0 + z1 + 2.0 * z2));
+
+      // 4. Novikov-Thorne Radiative Efficiency eta = 1 - E_ISCO
+      const rI = physicsState.rISCO;
+      const rI_12 = Math.sqrt(rI);
+      const rI_32 = rI * rI_12;
+      const numE = rI_32 - 2.0 * rI_12 + sgn * a;
+      const denE = Math.pow(rI, 0.75) * Math.sqrt(Math.max(1e-6, rI_32 - 3.0 * rI_12 + 2.0 * sgn * a));
+      const eISCO = numE / denE;
+      physicsState.etaEff = Math.max(0.03, 1.0 - eISCO);
+
+      // 5. Horizon Angular Velocity & Surface Gravity
+      physicsState.omegaH = a / (2.0 * physicsState.rPlus);
+      physicsState.kappa = (physicsState.rPlus - physicsState.rMinus) / (4.0 * physicsState.rPlus);
+      physicsState.bCrit = 3.0 * Math.sqrt(3.0) * (1.0 - 0.065 * a * a);
+    }
+
+    /**
+     * Evaluates the exact covariant Boyer-Lindquist metric tensor components g_uv(r, theta)
+     */
+    function evaluateCovariantMetricTensor(r, theta, a) {
+      const cosTh = Math.cos(theta);
+      const sinTh = Math.sin(theta);
+      const sin2Th = sinTh * sinTh;
+      const r2 = r * r;
+      const a2 = a * a;
+
+      const Sigma = r2 + a2 * cosTh * cosTh;
+      const Delta = Math.max(0.01, r2 - 2.0 * r + a2);
+
+      const g_tt = -(1.0 - (2.0 * r) / Sigma);
+      const g_tphi = -(2.0 * a * r * sin2Th) / Sigma;
+      const g_rr = Sigma / Delta;
+      const g_thth = Sigma;
+      const g_phiphi = (r2 + a2 + (2.0 * a2 * r * sin2Th) / Sigma) * sin2Th;
+
+      return { g_tt, g_tphi, g_rr, g_thth, g_phiphi, Sigma, Delta };
+    }
+
+    computeKerrMetricInvariants();
+
+    // ============================================================================
+    // 4. SCIENTIFIC GLSL SHADERS (EHT 230 GHz, PLANCKIAN, MONOCHROME, DOPPLER g)
+    // ============================================================================
+
+    const scientificColormapsGLSL = /* glsl */ `
+      // Mode 0: EHT 230 GHz VLBI Perceptual Hot-Iron / Afmhot Colormap
+      vec3 colormapEHT230GHz(float x) {
+        float t = clamp(x, 0.0, 1.35);
+        vec3 c0 = vec3(0.02, 0.01, 0.01);
+        vec3 c1 = vec3(0.42, 0.05, 0.02);
+        vec3 c2 = vec3(0.86, 0.34, 0.04);
+        vec3 c3 = vec3(0.98, 0.74, 0.22);
+        vec3 c4 = vec3(1.00, 0.98, 0.90);
+        vec3 col = mix(c0, c1, smoothstep(0.0, 0.25, t));
+        col = mix(col, c2, smoothstep(0.25, 0.58, t));
+        col = mix(col, c3, smoothstep(0.58, 0.90, t));
+        col = mix(col, c4, smoothstep(0.90, 1.30, t));
+        return col;
+      }
+
+      // Mode 1: Physical Planckian Blackbody Locus (3000K - 18000K)
+      vec3 colormapPlanckian(float tempNorm, float gFactor) {
+        float shifted = clamp(tempNorm * gFactor, 0.05, 1.85);
+        vec3 red3000K   = vec3(0.68, 0.16, 0.04);
+        vec3 warm5500K  = vec3(0.96, 0.62, 0.28);
+        vec3 white9000K = vec3(0.98, 0.97, 0.96);
+        vec3 blue16000K = vec3(0.72, 0.85, 1.00);
+        vec3 col = mix(red3000K, warm5500K, smoothstep(0.05, 0.45, shifted));
+        col = mix(col, white9000K, smoothstep(0.45, 0.95, shifted));
+        col = mix(col, blue16000K, smoothstep(0.95, 1.65, shifted));
+        return col;
+      }
+
+      // Mode 2: Bolometric Monochrome Specific Intensity I_nu
+      vec3 colormapMonochrome(float x) {
+        float v = clamp(pow(clamp(x, 0.0, 1.4), 0.85), 0.0, 1.25);
+        return vec3(v * 0.96, v * 0.97, v * 0.99);
+      }
+
+      // Mode 3: Diverging Relativistic Redshift/Blueshift g-Factor Map (g = nu_obs / nu_em)
+      vec3 colormapDopplerG(float gFactor, float fluxMask) {
+        // g < 1: Gravitationally/Doppler redshifted (Warm Coral Red)
+        // g = 1: Unshifted neutral (Alabaster Grey)
+        // g > 1: Relativistically blueshifted (Desaturated Sky Blue)
+        vec3 redShiftCol  = vec3(0.92, 0.28, 0.24);
+        vec3 neutralCol   = vec3(0.88, 0.90, 0.94);
+        vec3 blueShiftCol = vec3(0.32, 0.64, 0.98);
+        float deltaG = clamp((gFactor - 1.0) * 1.8, -1.0, 1.0);
+        vec3 base = deltaG < 0.0
+          ? mix(neutralCol, redShiftCol, -deltaG)
+          : mix(neutralCol, blueShiftCol, deltaG);
+        return base * clamp(fluxMask * 1.15, 0.15, 1.25);
+      }
+    `;
+
+    // --- SHADER A: Novikov-Thorne Relativistic Accretion Disk ---
+    const relativisticDiskVertexShader = /* glsl */ `
+      varying vec3 vWorldPos;
+      varying vec3 vLocalPos;
+      varying vec2 vUv;
+
+      void main() {
+        vUv = uv;
+        vLocalPos = position;
+        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+        vWorldPos = worldPosition.xyz;
+        gl_Position = projectionMatrix * viewMatrix * worldPosition;
+      }
+    `;
+
+    const relativisticDiskFragmentShader = /* glsl */ `
+      uniform float u_time;
+      uniform float u_spin;
+      uniform float u_isco;
+      uniform float u_mdot;
+      uniform float u_prograde;
+      uniform float u_doppler;
+      uniform float u_scale;
+      uniform int u_colormap;
+
+      varying vec3 vWorldPos;
+      varying vec3 vLocalPos;
+      varying vec2 vUv;
+
+      ${scientificColormapsGLSL}
+
+      float hash(vec2 p) {
+        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+      }
+
+      float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(
+          mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
+          mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x),
+          f.y
+        );
+      }
+
+      float fbm(vec2 p) {
+        float v = 0.0;
+        float amp = 0.5;
+        for (int i = 0; i < 4; i++) {
+          v += amp * noise(p);
+          p *= 2.06;
+          amp *= 0.5;
+        }
+        return v;
+      }
+
+      void main() {
+        float rGeom = length(vLocalPos.xz) / u_scale;
+        if (rGeom < u_isco * 0.94 || rGeom > 15.2) discard;
+
+        float phi = atan(vLocalPos.z, vLocalPos.x);
+
+        // Relativistic Keplerian Angular Velocity Omega_K = 1 / (r^(3/2) +- a*)
+        float omegaK = u_prograde / (pow(rGeom, 1.5) + u_prograde * u_spin);
+
+        // Magnetorotational Instability (MRI) Keplerian Shear Filaments
+        float shearAngle = phi - omegaK * u_time * 12.0 + log(rGeom) * 5.5 * u_prograde;
+        vec2 spiralCoord = vec2(cos(shearAngle) * rGeom * 0.75, sin(shearAngle) * rGeom * 0.75);
+        float mriTurb = fbm(spiralCoord + vec2(rGeom * 1.35, shearAngle * 1.4));
+        float ringMod = sin(rGeom * 8.0 - u_time * omegaK * 18.0 + mriTurb * 3.8) * 0.5 + 0.5;
+
+        // Exact Novikov-Thorne Radial Flux Profile F(r) ~ r^(-3) * (1 - sqrt(r_ISCO / r))
+        float iscoRatio = clamp(u_isco / rGeom, 0.0, 0.996);
+        float ntFlux = pow(rGeom / u_isco, -0.75) * pow(max(0.001, 1.0 - sqrt(iscoRatio)), 0.25);
+        float tempNorm = clamp(ntFlux * 1.85 * pow(u_mdot / 0.18, 0.25), 0.0, 1.5);
+
+        // Relativistic Redshift & Doppler Factor g = sqrt(-g_tt - 2*Omega*g_tphi - Omega^2*g_phiphi) / (1 - Omega*b)
+        vec3 viewDir = normalize(cameraPosition - vWorldPos);
+        vec3 tangentVelDir = normalize(vec3(-sin(phi), 0.0, cos(phi))) * u_prograde;
+        float betaOrbital = clamp(sqrt(1.0 / max(1.4, rGeom - 0.9)) * 0.66, 0.0, 0.76);
+        float cosPsi = dot(tangentVelDir, viewDir);
+
+        float gravLapse = sqrt(clamp(1.0 - 1.60 / max(1.65, rGeom), 0.14, 1.0));
+        float lorentzGamma = 1.0 / sqrt(max(0.16, 1.0 - betaOrbital * betaOrbital));
+        float gRelativistic = gravLapse / (lorentzGamma * (1.0 - betaOrbital * cosPsi));
+        float gEffective = mix(1.0, gRelativistic, u_doppler);
+
+        // Liouville Invariant Specific Intensity Boost I_obs = g^4 * I_em
+        float beamingBoost = pow(clamp(gEffective, 0.35, 1.62), 3.2);
+        float structure = 0.55 + 0.30 * mriTurb + 0.15 * ringMod;
+        float bolometricIntensity = tempNorm * structure * beamingBoost;
+
+        vec3 outColor;
+        if (u_colormap == 0) {
+          outColor = colormapEHT230GHz(bolometricIntensity * 0.88);
+        } else if (u_colormap == 1) {
+          outColor = colormapPlanckian(tempNorm * structure, gEffective) * beamingBoost * 0.95;
+        } else if (u_colormap == 2) {
+          outColor = colormapMonochrome(bolometricIntensity * 0.85);
+        } else {
+          outColor = colormapDopplerG(gEffective, tempNorm * structure);
+        }
+
+        float innerEdge = smoothstep(u_isco * 0.94, u_isco * 1.10, rGeom);
+        float outerEdge = 1.0 - smoothstep(10.2, 15.2, rGeom);
+        float alpha = innerEdge * outerEdge * (0.48 + 0.52 * structure) * clamp(beamingBoost * 0.8, 0.25, 1.2);
+        alpha = clamp(alpha, 0.0, 0.92);
+
+        if (alpha < 0.015) discard;
+        gl_FragColor = vec4(outColor, alpha);
+      }
+    `;
+
+    // --- SHADER B: Asymmetric D-Shaped Critical Curve & Photon Sub-Rings (n=1, n=2) ---
+    const lensingHaloVertexShader = /* glsl */ `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `;
+
+    const lensingHaloFragmentShader = /* glsl */ `
+      uniform float u_time;
+      uniform float u_spin;
+      uniform float u_inclination;
+      uniform float u_doppler;
+      uniform float u_prograde;
+      uniform int u_colormap;
+
+      varying vec2 vUv;
+
+      ${scientificColormapsGLSL}
+
+      void main() {
+        // Bardeen impact parameter coordinates (alpha, beta) in units of M
+        vec2 p = (vUv - 0.5) * 26.0;
+
+        float sinInc = sin(u_inclination);
+        // Kerr shadow centroid displacement proportional to a* sin(theta_0)
+        float dShift = -0.40 * u_spin * sinInc * u_prograde;
+        vec2 pShifted = vec2(p.x - dShift, p.y);
+
+        // Prograde D-shaped flattening of the critical curve
+        float asymX = pShifted.x < 0.0 ? (1.0 + 0.16 * u_spin * sinInc) : (1.0 - 0.04 * u_spin);
+        float bImpact = length(vec2(pShifted.x * asymX, pShifted.y));
+
+        float bCrit = 5.196 - 0.28 * u_spin * u_spin;
+
+        // Demagnified n=1 and n=2 Lyapunov photon sub-rings
+        float n1Ring = exp(-pow((bImpact - bCrit) / 0.19, 2.0));
+        float n2Ring = exp(-pow((bImpact - (bCrit - 0.07)) / 0.055, 2.0)) * 0.95;
+
+        // Gravitationally lensed upper/lower disk images bent across the poles
+        float archRadius = length(vec2(p.x * 0.84, p.y / max(0.26, sinInc * 0.92)));
+        float lensedArch = exp(-pow((archRadius - (bCrit + 1.10)) / 1.35, 2.0)) *
+                           smoothstep(0.18, 0.85, abs(p.y) / max(1.0, length(p)));
+
+        float gAsym = 1.0 - u_doppler * 0.44 * (p.x / (bCrit + 1.5)) * sinInc * u_prograde;
+        gAsym = clamp(gAsym, 0.35, 1.55);
+
+        float totalFlux = (n1Ring * 1.12 + n2Ring + lensedArch * 0.56) * gAsym;
+
+        // Interior of Black Hole Shadow (r < b_c is null capture cross-section)
+        float shadowInteriorMask = smoothstep(bCrit - 0.30, bCrit + 0.04, bImpact);
+        totalFlux *= shadowInteriorMask;
+
+        if (totalFlux < 0.015) discard;
+
+        vec3 ringColor;
+        if (u_colormap == 0) {
+          ringColor = colormapEHT230GHz(totalFlux * 0.95);
+        } else if (u_colormap == 1) {
+          ringColor = colormapPlanckian(totalFlux * 0.85, gAsym);
+        } else if (u_colormap == 2) {
+          ringColor = colormapMonochrome(totalFlux * 0.95);
+        } else {
+          ringColor = colormapDopplerG(gAsym, totalFlux);
+        }
+
+        gl_FragColor = vec4(ringColor, clamp(totalFlux, 0.0, 0.92));
+      }
+    `;
+
+    // --- SHADER C: Mathematical Geodesic Wireframe Ergosphere r_ergo(theta) ---
+    const ergosphereVertexShader = /* glsl */ `
+      uniform float u_spin;
+      uniform float u_scale;
+      varying vec3 vNormal;
+      varying vec2 vUv;
+      varying float vTheta;
+
+      void main() {
+        vUv = uv;
+        vNormal = normalize(normalMatrix * normal);
+        vec3 dir = normalize(position);
+        float cosTheta = dir.y;
+        vTheta = acos(clamp(cosTheta, -1.0, 1.0));
+
+        // Exact Kerr Static Limit: r_ergo(theta) = M * (1 + sqrt(1 - a*^2 cos^2(theta)))
+        float rErgo = 1.0 + sqrt(max(0.001, 1.0 - u_spin * u_spin * cosTheta * cosTheta));
+        vec3 displaced = dir * (rErgo * u_scale);
+
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
+      }
+    `;
+
+    const ergosphereFragmentShader = /* glsl */ `
+      uniform float u_spin;
+      varying vec3 vNormal;
+      varying vec2 vUv;
+      varying float vTheta;
+
+      void main() {
+        // Clean, crisp coordinate grid lines (Warm Ivory/Grey mathematical wireframe)
+        float meridian = smoothstep(0.955, 0.995, cos(vUv.x * 6.2831853 * 24.0));
+        float parallel = smoothstep(0.955, 0.995, cos(vTheta * 20.0));
+        float wire = max(meridian, parallel);
+
+        vec3 wireColor = vec3(0.82, 0.84, 0.88);
+        float rim = pow(1.0 - abs(dot(vNormal, vec3(0.0, 0.0, 1.0))), 2.5) * 0.18;
+        float alpha = clamp(wire * 0.32 + rim, 0.0, 0.45);
+
+        if (alpha < 0.015) discard;
+        gl_FragColor = vec4(wireColor, alpha);
+      }
+    `;
+
+    // --- SHADER D: Restrained Blandford-Znajek Synchrotron Polar Sheath ---
+    const bZJetVertexShader = /* glsl */ `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `;
+
+    const bZJetFragmentShader = /* glsl */ `
+      uniform float u_time;
+      uniform float u_spin;
+      varying vec2 vUv;
+
+      void main() {
+        float spinPower = u_spin * u_spin;
+        if (spinPower < 0.005) discard;
+
+        float angle = vUv.x * 6.2831853;
+        float fieldLine = pow(sin(angle * 6.0 - vUv.y * 16.0 + u_time * 5.0) * 0.5 + 0.5, 4.0);
+        float envelope = smoothstep(0.0, 0.14, vUv.y) * (1.0 - smoothstep(0.30, 1.0, vUv.y));
+
+        // Subtle warm-amber / ivory synchrotron emission
+        vec3 col = mix(vec3(0.75, 0.58, 0.38), vec3(0.92, 0.90, 0.86), fieldLine);
+        float alpha = envelope * (0.08 + 0.28 * fieldLine) * spinPower;
+
+        if (alpha < 0.01) discard;
+        gl_FragColor = vec4(col, alpha);
+      }
+    `;
+
+    // ============================================================================
+    // 5. 3D SPACETIME MANIFOLD & GEOMETRIC LAYERS
+    // ============================================================================
+    const blackHoleSystem = new THREE.Group();
+    scene.add(blackHoleSystem);
+
+    const decomposableLayers = [];
+    function registerLayer(group, unifiedPos, decomposedPos) {
+      group.userData.unifiedPos = unifiedPos.clone();
+      group.userData.decomposedPos = decomposedPos.clone();
+      group.position.copy(unifiedPos);
+      decomposableLayers.push(group);
+    }
+
+    // 5.1 LAYER 1: Outer Event Horizon r_+ & Inner Cauchy Horizon r_-
+    const horizonLayer = new THREE.Group();
+    blackHoleSystem.add(horizonLayer);
+    registerLayer(horizonLayer, new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 8.0, 0));
+
+    const outerHorizonMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(1.0, 64, 64),
+      new THREE.MeshBasicMaterial({ color: 0x000000 })
+    );
+    horizonLayer.add(outerHorizonMesh);
+
+    const cauchyHorizonMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(1.0, 28, 28),
+      new THREE.MeshBasicMaterial({
+        color: 0xf87171,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.22
+      })
+    );
+    horizonLayer.add(cauchyHorizonMesh);
+
+    const ringSingularityMesh = new THREE.Mesh(
+      new THREE.TorusGeometry(1.0, 0.025, 16, 64),
+      new THREE.MeshBasicMaterial({ color: 0xe5e7eb })
+    );
+    ringSingularityMesh.rotation.x = Math.PI / 2;
+    horizonLayer.add(ringSingularityMesh);
+
+    // 5.2 LAYER 2: Ergosphere Static Limit Surface r_ergo(theta)
+    const ergosphereLayer = new THREE.Group();
+    blackHoleSystem.add(ergosphereLayer);
+    registerLayer(ergosphereLayer, new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 4.2, 0));
+
+    const ergosphereMat = new THREE.ShaderMaterial({
+      vertexShader: ergosphereVertexShader,
+      fragmentShader: ergosphereFragmentShader,
+      uniforms: {
+        u_spin: { value: physicsState.spin },
+        u_scale: { value: VISUAL_SCALE }
+      },
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+    const ergosphereMesh = new THREE.Mesh(new THREE.SphereGeometry(1.0, 64, 48), ergosphereMat);
+    ergosphereLayer.add(ergosphereMesh);
+
+    // 5.3 LAYER 3: ISCO & Photon Shell Reference Rings
+    const criticalOrbitsLayer = new THREE.Group();
+    blackHoleSystem.add(criticalOrbitsLayer);
+    registerLayer(criticalOrbitsLayer, new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -3.5, 0));
+
+    const iscoRingMesh = new THREE.Mesh(
+      new THREE.TorusGeometry(1.0, 0.022, 20, 128),
+      new THREE.MeshBasicMaterial({ color: 0x60a5fa, transparent: true, opacity: 0.75 })
+    );
+    iscoRingMesh.rotation.x = Math.PI / 2;
+    criticalOrbitsLayer.add(iscoRingMesh);
+
+    const photonRingMesh = new THREE.Mesh(
+      new THREE.TorusGeometry(1.0, 0.018, 20, 128),
+      new THREE.MeshBasicMaterial({ color: 0xd97706, transparent: true, opacity: 0.7 })
+    );
+    photonRingMesh.rotation.x = Math.PI / 2;
+    criticalOrbitsLayer.add(photonRingMesh);
+
+    // 5.4 LAYER 4: Novikov-Thorne Relativistic Accretion Disk & Lensing Image Plane
+    const accretionLayer = new THREE.Group();
+    blackHoleSystem.add(accretionLayer);
+    registerLayer(accretionLayer, new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0));
+
+    const diskShaderMat = new THREE.ShaderMaterial({
+      vertexShader: relativisticDiskVertexShader,
+      fragmentShader: relativisticDiskFragmentShader,
+      uniforms: {
+        u_time: { value: 0 },
+        u_spin: { value: physicsState.spin },
+        u_isco: { value: physicsState.rISCO },
+        u_mdot: { value: physicsState.mdot },
+        u_prograde: { value: physicsState.prograde },
+        u_doppler: { value: physicsState.dopplerEnabled },
+        u_scale: { value: VISUAL_SCALE },
+        u_colormap: { value: physicsState.colormapMode }
+      },
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide
+    });
+
+    const diskGeo = new THREE.RingGeometry(1.15 * VISUAL_SCALE, 15.2 * VISUAL_SCALE, 160, 64);
+    diskGeo.rotateX(Math.PI / 2);
+    const accretionDiskMesh = new THREE.Mesh(diskGeo, diskShaderMat);
+    accretionLayer.add(accretionDiskMesh);
+
+    const lensingShaderMat = new THREE.ShaderMaterial({
+      vertexShader: lensingHaloVertexShader,
+      fragmentShader: lensingHaloFragmentShader,
+      uniforms: {
+        u_time: { value: 0 },
+        u_spin: { value: physicsState.spin },
+        u_inclination: { value: THREE.MathUtils.degToRad(physicsState.inclinationDeg) },
+        u_doppler: { value: physicsState.dopplerEnabled },
+        u_prograde: { value: physicsState.prograde },
+        u_colormap: { value: physicsState.colormapMode }
+      },
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide
+    });
+
+    const lensingBillboardMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(26.0 * VISUAL_SCALE, 26.0 * VISUAL_SCALE),
+      lensingShaderMat
+    );
+    accretionLayer.add(lensingBillboardMesh);
+
+    // 5.5 LAYER 5: Blandford-Znajek Parabolic Polar Sheath
+    const jetsLayer = new THREE.Group();
+    blackHoleSystem.add(jetsLayer);
+    registerLayer(jetsLayer, new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -10));
+
+    const bZJetMat = new THREE.ShaderMaterial({
+      vertexShader: bZJetVertexShader,
+      fragmentShader: bZJetFragmentShader,
+      uniforms: {
+        u_time: { value: 0 },
+        u_spin: { value: physicsState.spin }
+      },
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide
+    });
+
+    const northJetGeo = new THREE.CylinderGeometry(3.0, 0.5, 22.0, 48, 24, true);
+    northJetGeo.translate(0, 12.5, 0);
+    const southJetGeo = new THREE.CylinderGeometry(0.5, 3.0, 22.0, 48, 24, true);
+    southJetGeo.translate(0, -12.5, 0);
+    jetsLayer.add(new THREE.Mesh(northJetGeo, bZJetMat), new THREE.Mesh(southJetGeo, bZJetMat));
+
+    // 5.6 LAYER 6: Flamm's Embedding Paraboloid & Coordinate Grid
+    const flammLayer = new THREE.Group();
+    scene.add(flammLayer);
+    registerLayer(flammLayer, new THREE.Vector3(0, -7.2, 0), new THREE.Vector3(0, -11.5, 0));
+
+    const coordGrid = new THREE.GridHelper(120, 48, 0x2e323d, 0x161920);
+    coordGrid.position.y = -6.2;
+    flammLayer.add(coordGrid);
+
+    const flammGeo = new THREE.PlaneGeometry(52, 52, 64, 64);
+    flammGeo.rotateX(-Math.PI / 2);
+    const flammMesh = new THREE.Mesh(
+      flammGeo,
+      new THREE.MeshBasicMaterial({
+        color: 0x6b7280,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.24
+      })
+    );
+    flammLayer.add(flammMesh);
+
+    function updateFlammParaboloidGeometry() {
+      const posAttr = flammGeo.attributes.position;
+      const rHorizonVis = physicsState.rPlus * VISUAL_SCALE;
+      for (let i = 0; i < posAttr.count; i++) {
+        const x = posAttr.getX(i);
+        const z = posAttr.getZ(i);
+        const rVis = Math.sqrt(x * x + z * z);
+        const effR = Math.max(rHorizonVis * 0.85, rVis);
+        const depth = -6.0 / Math.sqrt(0.65 + (effR - rHorizonVis * 0.8) * 0.28);
+        posAttr.setY(i, depth);
+      }
+      posAttr.needsUpdate = true;
+    }
+
+    function syncManifoldMeshesWithPhysics() {
+      computeKerrMetricInvariants();
+
+      const rPlusVis = physicsState.rPlus * VISUAL_SCALE;
+      const rMinusVis = Math.max(0.08, physicsState.rMinus * VISUAL_SCALE);
+      const rSingVis = Math.max(0.05, physicsState.spin * VISUAL_SCALE);
+      const rISCOVis = physicsState.rISCO * VISUAL_SCALE;
+      const rPhVis = (physicsState.prograde > 0 ? physicsState.rPhPro : physicsState.rPhRetro) * VISUAL_SCALE;
+
+      outerHorizonMesh.scale.setScalar(rPlusVis);
+      cauchyHorizonMesh.scale.setScalar(rMinusVis);
+      ringSingularityMesh.scale.setScalar(rSingVis);
+      iscoRingMesh.scale.setScalar(rISCOVis);
+      photonRingMesh.scale.setScalar(rPhVis);
+
+      diskShaderMat.uniforms.u_spin.value = physicsState.spin;
+      diskShaderMat.uniforms.u_isco.value = physicsState.rISCO;
+      diskShaderMat.uniforms.u_mdot.value = physicsState.mdot;
+      diskShaderMat.uniforms.u_prograde.value = physicsState.prograde;
+      diskShaderMat.uniforms.u_doppler.value = physicsState.dopplerEnabled;
+      diskShaderMat.uniforms.u_colormap.value = physicsState.colormapMode;
+
+      lensingShaderMat.uniforms.u_spin.value = physicsState.spin;
+      lensingShaderMat.uniforms.u_inclination.value = THREE.MathUtils.degToRad(physicsState.inclinationDeg);
+      lensingShaderMat.uniforms.u_doppler.value = physicsState.dopplerEnabled;
+      lensingShaderMat.uniforms.u_prograde.value = physicsState.prograde;
+      lensingShaderMat.uniforms.u_colormap.value = physicsState.colormapMode;
+
+      ergosphereMat.uniforms.u_spin.value = physicsState.spin;
+      bZJetMat.uniforms.u_spin.value = physicsState.spin;
+
+      updateFlammParaboloidGeometry();
+      updateScientificTelemetryDOM();
+    }
+
+    // ============================================================================
+    // 6. RK4 SYMPLECTIC TIMELIKE GEODESIC INTEGRATOR
+    // ============================================================================
+    const geodesicState = {
+      r0: 8.50,
+      Lz: 3.45,
+      ecc: 0.28,
+      r: 8.50,
+      phi: 0.0,
+      theta: Math.PI / 2,
+      vr: 0.0,
+      E: 0.965,
+      hamiltonianErr: 1.42e-9,
+      trailPoints: [],
+      maxTrailLength: 460,
+      status: 'BOUND PRECESSED'
+    };
+
+    const geodesicGroup = new THREE.Group();
+    blackHoleSystem.add(geodesicGroup);
+
+    const testParticleMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.18, 20, 20),
+      new THREE.MeshBasicMaterial({ color: 0xf3f4f6 })
+    );
+    geodesicGroup.add(testParticleMesh);
+
+    const trailPositions = new Float32Array(geodesicState.maxTrailLength * 3);
+    const trailGeo = new THREE.BufferGeometry();
+    trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
+    const trailLine = new THREE.Line(
+      trailGeo,
+      new THREE.LineBasicMaterial({ color: 0x9ca3af, transparent: true, opacity: 0.85 })
+    );
+    geodesicGroup.add(trailLine);
+
+    function kerrEffectivePotential(r, a, E, Lz) {
+      const sgn = physicsState.prograde;
+      const L = sgn * Lz;
+      const dL = L - a * E;
+      return -1.0 / r + (L * L) / (2.0 * r * r) - (dL * dL) / (r * r * r);
+    }
+
+    function kerrRadialAcceleration(r, a, E, Lz) {
+      const sgn = physicsState.prograde;
+      const L = sgn * Lz;
+      const dL = L - a * E;
+      return -1.0 / (r * r) + (L * L) / (r * r * r) - (3.0 * dL * dL) / (r * r * r * r);
+    }
+
+    function kerrPhiVelocity(r, a, E, Lz) {
+      const sgn = physicsState.prograde;
+      const L = sgn * Lz;
+      const delta = Math.max(0.05, r * r - 2.0 * r + a * a);
+      return ((1.0 - 2.0 / r) * L + (2.0 * a / r) * E) / delta;
+    }
+
+    function applyGeodesicPreset(presetKey) {
+      const a = physicsState.spin;
+      if (presetKey === 'precessed') {
+        geodesicState.r0 = 8.50;
+        geodesicState.Lz = 3.45;
+        geodesicState.ecc = 0.28;
+        geodesicState.status = 'BOUND PRECESSED';
+      } else if (presetKey === 'isco_pro') {
+        physicsState.prograde = 1;
+        document.getElementById('btn-prograde').classList.add('active');
+        document.getElementById('btn-retrograde').classList.remove('active');
+        syncManifoldMeshesWithPhysics();
+        geodesicState.r0 = parseFloat(physicsState.rISCO.toFixed(2));
+        geodesicState.Lz = parseFloat((Math.sqrt(geodesicState.r0) * 1.42).toFixed(2));
+        geodesicState.ecc = 0.00;
+        geodesicState.status = 'PROGRADE ISCO';
+      } else if (presetKey === 'isco_retro') {
+        physicsState.prograde = -1;
+        document.getElementById('btn-retrograde').classList.add('active');
+        document.getElementById('btn-prograde').classList.remove('active');
+        syncManifoldMeshesWithPhysics();
+        geodesicState.r0 = parseFloat(physicsState.rISCO.toFixed(2));
+        geodesicState.Lz = parseFloat((Math.sqrt(geodesicState.r0) * 1.38).toFixed(2));
+        geodesicState.ecc = 0.00;
+        geodesicState.status = 'RETROGRADE ISCO';
+      } else if (presetKey === 'zoom_whirl') {
+        const lCrit = Math.max(1.85, physicsState.rISCO * 0.92 + 0.65);
+        geodesicState.r0 = Math.max(5.5, parseFloat((physicsState.rISCO * 2.1).toFixed(2)));
+        geodesicState.Lz = parseFloat(lCrit.toFixed(2));
+        geodesicState.ecc = 0.46;
+        geodesicState.status = 'ZOOM-WHIRL SEPARATRIX';
+      } else if (presetKey === 'hyperbolic') {
+        geodesicState.r0 = 16.50;
+        geodesicState.Lz = 4.65;
+        geodesicState.ecc = 0.72;
+        geodesicState.status = 'UNBOUND HYPERBOLIC';
+      } else if (presetKey === 'plunge') {
+        geodesicState.r0 = 6.20;
+        geodesicState.Lz = 1.65;
+        geodesicState.ecc = 0.15;
+        geodesicState.status = 'PLUNGE GEODESIC';
+      }
+
+      document.getElementById('slider-r0').value = geodesicState.r0;
+      document.getElementById('slider-lz').value = geodesicState.Lz;
+      document.getElementById('slider-ecc').value = geodesicState.ecc;
+      document.getElementById('val-r0').textContent = `${geodesicState.r0.toFixed(2)} M`;
+      document.getElementById('val-lz').textContent = `${geodesicState.Lz.toFixed(2)} M`;
+      document.getElementById('val-ecc').textContent = geodesicState.ecc.toFixed(2);
+
+      resetGeodesicTrajectory();
+    }
+
+    function resetGeodesicTrajectory() {
+      const a = physicsState.spin;
+      geodesicState.r = geodesicState.r0;
+      geodesicState.phi = 0.0;
+      const vPot0 = kerrEffectivePotential(geodesicState.r0, a, 0.96, geodesicState.Lz);
+      geodesicState.E = Math.sqrt(Math.max(0.75, 1.0 + 2.0 * vPot0));
+      geodesicState.vr = (geodesicState.status === 'PLUNGE GEODESIC' ? -1 : 1) * geodesicState.ecc * 0.22;
+      geodesicState.trailPoints = [];
+
+      const badge = document.getElementById('orbit-regime-badge');
+      if (badge) badge.textContent = geodesicState.status;
+    }
+
+    function stepGeodesicRK4(dtau) {
+      const a = physicsState.spin;
+      const E = geodesicState.E;
+      const Lz = geodesicState.Lz;
+
+      let r = geodesicState.r;
+      let vr = geodesicState.vr;
+      let phi = geodesicState.phi;
+
+      if (r <= physicsState.rPlus * 1.03) {
+        resetGeodesicTrajectory();
+        return;
+      }
+
+      if (r > 26.0) {
+        geodesicState.r = geodesicState.r0;
+        geodesicState.vr = -Math.abs(geodesicState.vr) * 0.6;
+        return;
+      }
+
+      const k1_r = vr;
+      const k1_v = kerrRadialAcceleration(r, a, E, Lz);
+      const k1_p = kerrPhiVelocity(r, a, E, Lz);
+
+      const r2 = Math.max(physicsState.rPlus * 1.01, r + 0.5 * dtau * k1_r);
+      const k2_r = vr + 0.5 * dtau * k1_v;
+      const k2_v = kerrRadialAcceleration(r2, a, E, Lz);
+      const k2_p = kerrPhiVelocity(r2, a, E, Lz);
+
+      const r3 = Math.max(physicsState.rPlus * 1.01, r + 0.5 * dtau * k2_r);
+      const k3_r = vr + 0.5 * dtau * k2_v;
+      const k3_v = kerrRadialAcceleration(r3, a, E, Lz);
+      const k3_p = kerrPhiVelocity(r3, a, E, Lz);
+
+      const r4 = Math.max(physicsState.rPlus * 1.01, r + dtau * k3_r);
+      const k4_r = vr + dtau * k3_v;
+      const k4_v = kerrRadialAcceleration(r4, a, E, Lz);
+      const k4_p = kerrPhiVelocity(r4, a, E, Lz);
+
+      geodesicState.r += (dtau / 6.0) * (k1_r + 2.0 * k2_r + 2.0 * k3_r + k4_r);
+      geodesicState.vr += (dtau / 6.0) * (k1_v + 2.0 * k2_v + 2.0 * k3_v + k4_v);
+      geodesicState.phi += (dtau / 6.0) * (k1_p + 2.0 * k2_p + 2.0 * k3_p + k4_p);
+
+      // Lense-Thirring nodal tilt
+      const nodalTilt = 0.12 * a * Math.sin(geodesicState.phi * 0.72);
+      geodesicState.theta = Math.PI / 2 - nodalTilt;
+
+      const rVis = geodesicState.r * VISUAL_SCALE;
+      const px = rVis * Math.cos(geodesicState.phi);
+      const py = rVis * Math.sin(nodalTilt);
+      const pz = rVis * Math.sin(geodesicState.phi);
+
+      testParticleMesh.position.set(px, py, pz);
+
+      geodesicState.trailPoints.push(new THREE.Vector3(px, py, pz));
+      if (geodesicState.trailPoints.length > geodesicState.maxTrailLength) {
+        geodesicState.trailPoints.shift();
+      }
+
+      const len = geodesicState.trailPoints.length;
+      for (let i = 0; i < geodesicState.maxTrailLength; i++) {
+        const pt = geodesicState.trailPoints[Math.min(i, len - 1)] || testParticleMesh.position;
+        trailPositions[i * 3] = pt.x;
+        trailPositions[i * 3 + 1] = pt.y;
+        trailPositions[i * 3 + 2] = pt.z;
+      }
+      trailGeo.attributes.position.needsUpdate = true;
+    }
+
+    resetGeodesicTrajectory();
+
+    // ============================================================================
+    // 7. SUBTLE ASTROMETRIC REFERENCE BACKGROUND
+    // ============================================================================
+    function createAstrometricReferenceStars() {
+      const count = 2400;
+      const geo = new THREE.BufferGeometry();
+      const pos = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        const r = 180 + Math.random() * 200;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        pos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+        pos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+        pos[i * 3 + 2] = r * Math.cos(phi);
+      }
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      const stars = new THREE.Points(
+        geo,
+        new THREE.PointsMaterial({ color: 0x9ca3af, size: 0.75, transparent: true, opacity: 0.45 })
+      );
+      scene.add(stars);
+    }
+    createAstrometricReferenceStars();
+
+    // ============================================================================
+    // 8. CSS2D LATEX-STYLE FIGURE ANNOTATIONS
+    // ============================================================================
+    const annotationNodes = [];
+
+    function createFigureAnnotation({ parent, offset, leftSide, htmlContent }) {
+      const root = document.createElement('div');
+      root.className = 'latex-annotation';
+
+      const anchor = document.createElement('div');
+      anchor.className = 'latex-anchor';
+
+      const leader = document.createElement('div');
+      leader.className = `latex-leader ${leftSide ? 'left-side' : ''}`;
+
+      const tag = document.createElement('div');
+      tag.className = `latex-tag ${leftSide ? 'left-side' : ''}`;
+      tag.innerHTML = htmlContent;
+
+      root.appendChild(anchor);
+      root.appendChild(leader);
+      root.appendChild(tag);
+
+      labelRenderer.domElement.appendChild(root);
+
+      const obj = new CSS2DObject(root);
+      obj.position.copy(offset);
+      parent.add(obj);
+      annotationNodes.push(root);
+      return obj;
+    }
+
+    const labelHorizon = createFigureAnnotation({
+      parent: horizonLayer,
+      offset: new THREE.Vector3(0, 2.5, 0),
+      leftSide: true,
+      htmlContent: `<span class="math-serif italic">r</span><sub>+</sub> = <span id="lbl-rplus" class="mono-num">1.44M</span>`
+    });
+
+    const labelErgo = createFigureAnnotation({
+      parent: ergosphereLayer,
+      offset: new THREE.Vector3(-3.2, 0.2, 0),
+      leftSide: true,
+      htmlContent: `<span class="math-serif italic">r</span><sub>ergo</sub>(π/2) = <span class="mono-num">2.00M</span>`
+    });
+
+    const labelISCO = createFigureAnnotation({
+      parent: criticalOrbitsLayer,
+      offset: new THREE.Vector3(3.8, 0.3, 0),
+      leftSide: false,
+      htmlContent: `<span class="math-serif italic">r</span><sub>ISCO</sub> = <span id="lbl-risco" class="mono-num text-[#60A5FA]">2.32M</span>`
+    });
+
+    createFigureAnnotation({
+      parent: testParticleMesh,
+      offset: new THREE.Vector3(0, 0.45, 0),
+      leftSide: false,
+      htmlContent: `<span class="math-serif italic">x</span><sup>μ</sup>(τ): <span id="lbl-part-r" class="mono-num">8.50M</span>`
+    });
+
+    // ============================================================================
+    // 9. MATPLOTLIB-STYLE 2D EFFECTIVE POTENTIAL & PHASE PORTRAIT PLOTTER
+    // ============================================================================
+    const potCanvas = document.getElementById('potential-canvas');
+    const potCtx = potCanvas.getContext('2d');
+
+    function renderScientificPlots() {
+      const w = potCanvas.width;
+      const h = potCanvas.height;
+      potCtx.clearRect(0, 0, w, h);
+
+      const padL = 34;
+      const padR = 10;
+      const padT = 10;
+      const padB = 22;
+      const plotW = w - padL - padR;
+      const plotH = h - padT - padB;
+      const splitY = padT + plotH * 0.56;
+
+      // Subtle Gridlines
+      potCtx.strokeStyle = '#181B22';
+      potCtx.lineWidth = 1;
+      for (let i = 0; i <= 5; i++) {
+        const x = padL + (i / 5) * plotW;
+        potCtx.beginPath();
+        potCtx.moveTo(x, padT);
+        potCtx.lineTo(x, h - padB);
+        potCtx.stroke();
+      }
+
+      const rMin = 1.0;
+      const rMax = 20.0;
+      const mapX = (r) => padL + ((r - rMin) / (rMax - rMin)) * plotW;
+
+      // --- TOP SUBPLOT: Effective Potential V_eff(r/M) ---
+      const vMin = -0.16;
+      const vMax = 0.06;
+      const mapYv = (v) => padT + (1.0 - (v - vMin) / (vMax - vMin)) * (splitY - padT - 6);
+
+      // Zero Reference Line
+      const yZero = mapYv(0.0);
+      potCtx.strokeStyle = '#2E323D';
+      potCtx.setLineDash([3, 3]);
+      potCtx.beginPath();
+      potCtx.moveTo(padL, yZero);
+      potCtx.lineTo(w - padR, yZero);
+      potCtx.stroke();
+      potCtx.setLineDash([]);
+
+      // V_eff(r) Curve
+      potCtx.strokeStyle = '#E5E7EB';
+      potCtx.lineWidth = 1.5;
+      potCtx.beginPath();
+      let started = false;
+      for (let px = 0; px <= plotW; px += 2) {
+        const r = rMin + (px / plotW) * (rMax - rMin);
+        if (r < physicsState.rPlus) continue;
+        const v = kerrEffectivePotential(r, physicsState.spin, geodesicState.E, geodesicState.Lz);
+        const py = THREE.MathUtils.clamp(mapYv(v), padT, splitY - 6);
+        if (!started) {
+          potCtx.moveTo(padL + px, py);
+          started = true;
+        } else {
+          potCtx.lineTo(padL + px, py);
+        }
+      }
+      potCtx.stroke();
+
+      // --- BOTTOM SUBPLOT: Radial Phase Portrait (r/M, dr/d_tau) ---
+      const vrMax = 0.25;
+      const mapYvr = (vr) => {
+        const top = splitY + 6;
+        const bot = h - padB;
+        return top + (0.5 - vr / (2.0 * vrMax)) * (bot - top);
+      };
+
+      const yVrZero = mapYvr(0.0);
+      potCtx.strokeStyle = '#262932';
+      potCtx.beginPath();
+      potCtx.moveTo(padL, yVrZero);
+      potCtx.lineTo(w - padR, yVrZero);
+      potCtx.stroke();
+
+      // Horizon r_+ and r_ISCO Vertical Lines across both subplots
+      const xH = mapX(physicsState.rPlus);
+      potCtx.strokeStyle = '#F87171';
+      potCtx.lineWidth = 1.2;
+      potCtx.beginPath();
+      potCtx.moveTo(xH, padT);
+      potCtx.lineTo(xH, h - padB);
+      potCtx.stroke();
+
+      const xI = mapX(physicsState.rISCO);
+      potCtx.strokeStyle = '#60A5FA';
+      potCtx.lineWidth = 1.1;
+      potCtx.beginPath();
+      potCtx.moveTo(xI, padT);
+      potCtx.lineTo(xI, h - padB);
+      potCtx.stroke();
+
+      // Particle Marker on V_eff(r) & Phase Space (r, vr)
+      const partX = THREE.MathUtils.clamp(mapX(geodesicState.r), padL, w - padR);
+      const partV = kerrEffectivePotential(geodesicState.r, physicsState.spin, geodesicState.E, geodesicState.Lz);
+      const partYv = THREE.MathUtils.clamp(mapYv(partV), padT + 3, splitY - 8);
+      const partYvr = THREE.MathUtils.clamp(mapYvr(geodesicState.vr), splitY + 8, h - padB - 3);
+
+      potCtx.fillStyle = '#F3F4F6';
+      potCtx.beginPath();
+      potCtx.arc(partX, partYv, 3.2, 0, Math.PI * 2);
+      potCtx.fill();
+
+      potCtx.fillStyle = '#60A5FA';
+      potCtx.beginPath();
+      potCtx.arc(partX, partYvr, 3.2, 0, Math.PI * 2);
+      potCtx.fill();
+
+      // Subplot Frame & Axis Labels
+      potCtx.strokeStyle = '#2E323D';
+      potCtx.lineWidth = 1;
+      potCtx.strokeRect(padL, padT, plotW, splitY - padT - 4);
+      potCtx.strokeRect(padL, splitY + 4, plotW, h - padB - splitY - 4);
+
+      potCtx.fillStyle = '#9CA3AF';
+      potCtx.font = '9.5px "JetBrains Mono", monospace';
+      potCtx.fillText('V_eff', 3, padT + 12);
+      potCtx.fillText('dr/dτ', 3, splitY + 18);
+
+      // X-Axis Ticks (r/M)
+      for (let rTick = 2; rTick <= 20; rTick += 4) {
+        const tx = mapX(rTick);
+        potCtx.fillText(`${rTick}M`, tx - 8, h - 6);
+      }
+    }
+
+    // ============================================================================
+    // 10. SCIENTIFIC TELEMETRY & LIVE TENSOR MATRIX DOM UPDATER
+    // ============================================================================
+    function updateScientificTelemetryDOM() {
+      const M_solar = Math.pow(10, physicsState.logMassSolar);
+      const rg_km = M_solar * 1.476625;
+      const a = physicsState.spin;
+
+      const fmtSci = (val, digits = 2) => {
+        if (val === 0) return '0.00';
+        const exp = Math.floor(Math.log10(Math.abs(val)));
+        const mant = (val / Math.pow(10, exp)).toFixed(digits);
+        return `${mant}×10^${exp}`;
+      };
+
+      document.getElementById('val-spin').textContent = a.toFixed(3);
+      document.getElementById('val-mass').textContent = `${fmtSci(M_solar, 2)} M☉`;
+      document.getElementById('val-inc').textContent = `${physicsState.inclinationDeg.toFixed(1)}°`;
+      document.getElementById('val-mdot').textContent = physicsState.mdot.toFixed(3);
+
+      document.getElementById('readout-rplus').textContent =
+        `${physicsState.rPlus.toFixed(4)} M (${fmtSci(physicsState.rPlus * rg_km, 2)} km)`;
+      document.getElementById('readout-rminus').textContent =
+        `${physicsState.rMinus.toFixed(4)} M (${fmtSci(physicsState.rMinus * rg_km, 2)} km)`;
+      document.getElementById('readout-rergo').textContent =
+        `2.0000 M (${fmtSci(2.0 * rg_km, 2)} km)`;
+      document.getElementById('readout-rph').textContent =
+        `${physicsState.rPhPro.toFixed(4)} M / ${physicsState.rPhRetro.toFixed(4)} M`;
+      document.getElementById('readout-risco').textContent =
+        `${physicsState.rISCO.toFixed(4)} M (${fmtSci(physicsState.rISCO * rg_km, 2)} km)`;
+      document.getElementById('readout-shadow').textContent =
+        `${physicsState.bCrit.toFixed(3)} M (${a > 0.08 ? 'Asymmetric D' : 'Symmetric'})`;
+
+      document.getElementById('readout-eta').textContent =
+        `${(physicsState.etaEff * 100).toFixed(2)}% (${physicsState.etaEff.toFixed(4)} c²)`;
+      document.getElementById('readout-omegah').textContent =
+        `${physicsState.omegaH.toFixed(4)} c/M`;
+      document.getElementById('readout-kappa').textContent =
+        `${physicsState.kappa.toFixed(4)} c²/M`;
+
+      const T_Hawking = (6.169e-8 / M_solar) * (2.0 * physicsState.kappa);
+      document.getElementById('readout-th').textContent = `${fmtSci(T_Hawking, 2)} K`;
+
+      const P_BZ = 1.25e45 * (M_solar / 1e9) * physicsState.mdot * (a * a);
+      document.getElementById('readout-pbz').textContent = `${fmtSci(P_BZ, 2)} erg/s`;
+
+      const kretschmann = 48.0 / Math.pow(physicsState.rPlus, 6);
+      document.getElementById('readout-kretschmann').textContent = `${kretschmann.toFixed(3)} M⁻⁴`;
+
+      // Update 3D LaTeX Annotations
+      const lblRplus = document.getElementById('lbl-rplus');
+      if (lblRplus) lblRplus.textContent = `${physicsState.rPlus.toFixed(2)}M`;
+      const lblRisco = document.getElementById('lbl-risco');
+      if (lblRisco) lblRisco.textContent = `${physicsState.rISCO.toFixed(2)}M`;
+
+      labelHorizon.position.set(0, physicsState.rPlus * VISUAL_SCALE + 0.6, 0);
+      labelISCO.position.set(physicsState.rISCO * VISUAL_SCALE, 0.35, 0);
+    }
+
+    function updateLiveMetricTensorDOM() {
+      const r = Math.max(physicsState.rPlus * 1.02, geodesicState.r);
+      const th = geodesicState.theta;
+      const g = evaluateCovariantMetricTensor(r, th, physicsState.spin);
+
+      const fmt = (v) => (v >= 0 ? `+${v.toFixed(3)}` : v.toFixed(3));
+      document.getElementById('tensor-eval-coords').textContent = `at r = ${r.toFixed(2)}M, θ = ${(th * 180 / Math.PI).toFixed(0)}°`;
+      document.getElementById('g-tt').textContent = fmt(g.g_tt);
+      document.getElementById('g-tphi').textContent = fmt(g.g_tphi);
+      document.getElementById('g-phit').textContent = fmt(g.g_tphi);
+      document.getElementById('g-rr').textContent = fmt(g.g_rr);
+      document.getElementById('g-thth').textContent = `+${g.g_thth.toFixed(2)}`;
+      document.getElementById('g-phiphi').textContent = `+${g.g_phiphi.toFixed(2)}`;
+    }
+
+    // ============================================================================
+    // 11. GSAP MANIFOLD DECOMPOSITION & UI EVENT BINDINGS
+    // ============================================================================
+    const btnDecompose = document.getElementById('btn-decompose');
+    const btnDecomposeLabel = document.getElementById('btn-decompose-label');
+
+    btnDecompose.addEventListener('click', () => {
+      physicsState.isDecomposed = !physicsState.isDecomposed;
+      btnDecompose.classList.toggle('active', physicsState.isDecomposed);
+      btnDecomposeLabel.textContent = physicsState.isDecomposed ? 'Unify Manifold' : 'Decompose Manifold';
+
+      decomposableLayers.forEach((layer, idx) => {
+        const target = physicsState.isDecomposed ? layer.userData.decomposedPos : layer.userData.unifiedPos;
+        gsap.to(layer.position, {
+          x: target.x,
+          y: target.y,
+          z: target.z,
+          duration: 1.2,
+          delay: idx * 0.04,
+          ease: 'power3.inOut'
+        });
+      });
+    });
+
+    function applyInclinationCamera(deg, dist = 34.0) {
+      physicsState.inclinationDeg = deg;
+      document.getElementById('slider-inc').value = deg;
+      syncManifoldMeshesWithPhysics();
+
+      const thetaRad = THREE.MathUtils.degToRad(90.0 - deg);
+      gsap.to(camera.position, {
+        x: 0,
+        y: dist * Math.sin(thetaRad),
+        z: dist * Math.cos(thetaRad),
+        duration: 1.15,
+        ease: 'power3.inOut'
+      });
+      gsap.to(controls.target, { x: 0, y: 0, z: 0, duration: 1.15, ease: 'power3.inOut' });
+    }
+
+    // Target Catalog Selector
+    const empiricalCatalog = {
+      m87: { spin: 0.900, logMass: 9.813, inc: 78.0, mdot: 0.18 },
+      sgra: { spin: 0.500, logMass: 6.618, inc: 68.0, mdot: 0.08 },
+      cygx1: { spin: 0.998, logMass: 1.326, inc: 62.5, mdot: 0.65 },
+      gw150914: { spin: 0.680, logMass: 1.792, inc: 75.0, mdot: 0.12 },
+      schwarzschild: { spin: 0.000, logMass: 8.000, inc: 80.0, mdot: 0.20 }
+    };
+
+    document.getElementById('select-target').addEventListener('change', (e) => {
+      const p = empiricalCatalog[e.target.value];
+      if (!p) return;
+      physicsState.spin = p.spin;
+      physicsState.logMassSolar = p.logMass;
+      physicsState.inclinationDeg = p.inc;
+      physicsState.mdot = p.mdot;
+
+      document.getElementById('slider-spin').value = p.spin;
+      document.getElementById('slider-mass').value = p.logMass;
+      document.getElementById('slider-inc').value = p.inc;
+      document.getElementById('slider-mdot').value = p.mdot;
+
+      syncManifoldMeshesWithPhysics();
+      resetGeodesicTrajectory();
+    });
+
+    // Colormap Selector
+    document.getElementById('select-colormap').addEventListener('change', (e) => {
+      physicsState.colormapMode = parseInt(e.target.value, 10);
+      syncManifoldMeshesWithPhysics();
+    });
+
+    // Left Dock Sliders
+    document.getElementById('slider-spin').addEventListener('input', (e) => {
+      physicsState.spin = parseFloat(e.target.value);
+      syncManifoldMeshesWithPhysics();
+    });
+    document.getElementById('slider-mass').addEventListener('input', (e) => {
+      physicsState.logMassSolar = parseFloat(e.target.value);
+      syncManifoldMeshesWithPhysics();
+    });
+    document.getElementById('slider-inc').addEventListener('input', (e) => {
+      applyInclinationCamera(parseFloat(e.target.value), camera.position.length());
+    });
+    document.getElementById('slider-mdot').addEventListener('input', (e) => {
+      physicsState.mdot = parseFloat(e.target.value);
+      syncManifoldMeshesWithPhysics();
+    });
+
+    // Prograde / Retrograde Orientation
+    const btnPrograde = document.getElementById('btn-prograde');
+    const btnRetrograde = document.getElementById('btn-retrograde');
+    btnPrograde.addEventListener('click', () => {
+      physicsState.prograde = 1;
+      btnPrograde.classList.add('active');
+      btnRetrograde.classList.remove('active');
+      syncManifoldMeshesWithPhysics();
+    });
+    btnRetrograde.addEventListener('click', () => {
+      physicsState.prograde = -1;
+      btnRetrograde.classList.add('active');
+      btnPrograde.classList.remove('active');
+      syncManifoldMeshesWithPhysics();
+    });
+
+    // Doppler Beaming Toggle
+    const btnDoppler = document.getElementById('btn-doppler');
+    btnDoppler.addEventListener('click', () => {
+      physicsState.dopplerEnabled = physicsState.dopplerEnabled > 0.5 ? 0.0 : 1.0;
+      const on = physicsState.dopplerEnabled > 0.5;
+      btnDoppler.classList.toggle('active', on);
+      btnDoppler.textContent = on ? 'Enabled (g⁴)' : 'Intrinsic (g=1)';
+      syncManifoldMeshesWithPhysics();
+    });
+
+    // Geodesic Controls
+    document.getElementById('select-orbit-preset').addEventListener('change', (e) => {
+      applyGeodesicPreset(e.target.value);
+    });
+    document.getElementById('slider-r0').addEventListener('input', (e) => {
+      geodesicState.r0 = parseFloat(e.target.value);
+      document.getElementById('val-r0').textContent = `${geodesicState.r0.toFixed(2)} M`;
+    });
+    document.getElementById('slider-lz').addEventListener('input', (e) => {
+      geodesicState.Lz = parseFloat(e.target.value);
+      document.getElementById('val-lz').textContent = `${geodesicState.Lz.toFixed(2)} M`;
+    });
+    document.getElementById('slider-ecc').addEventListener('input', (e) => {
+      geodesicState.ecc = parseFloat(e.target.value);
+      document.getElementById('val-ecc').textContent = geodesicState.ecc.toFixed(2);
+    });
+    document.getElementById('slider-timescale').addEventListener('input', (e) => {
+      physicsState.timeScale = parseFloat(e.target.value);
+      document.getElementById('val-timescale').textContent = `${physicsState.timeScale.toFixed(2)}×`;
+    });
+
+    document.getElementById('btn-integrate-reset').addEventListener('click', () => {
+      resetGeodesicTrajectory();
+    });
+
+    const btnPauseSim = document.getElementById('btn-pause-sim');
+    btnPauseSim.addEventListener('click', () => {
+      physicsState.isPaused = !physicsState.isPaused;
+      btnPauseSim.classList.toggle('active', physicsState.isPaused);
+      btnPauseSim.textContent = physicsState.isPaused ? 'Resume dτ' : 'Pause dτ';
+    });
+
+    // Manifold Layer Toggles
+    const bindLayerToggle = (btnId, obj3d) => {
+      const btn = document.getElementById(btnId);
+      btn.addEventListener('click', () => {
+        obj3d.visible = !obj3d.visible;
+        btn.classList.toggle('active', obj3d.visible);
+      });
+    };
+    bindLayerToggle('toggle-ergosphere', ergosphereLayer);
+    bindLayerToggle('toggle-photon-sphere', criticalOrbitsLayer);
+    bindLayerToggle('toggle-jets', jetsLayer);
+    bindLayerToggle('toggle-flamm', flammLayer);
+
+    // Camera Projection Presets
+    document.querySelectorAll('.cam-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.cam-btn').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        const mode = btn.dataset.cam;
+        if (mode === 'default') applyInclinationCamera(78.0, 34);
+        else if (mode === 'edge') applyInclinationCamera(86.0, 30);
+        else if (mode === 'polar') applyInclinationCamera(5.0, 36);
+        else if (mode === 'flamm') {
+          gsap.to(camera.position, { x: 24, y: -2, z: 28, duration: 1.25, ease: 'power3.inOut' });
+          gsap.to(controls.target, { x: 0, y: -7.2, z: 0, duration: 1.25, ease: 'power3.inOut' });
+        }
+      });
+    });
+
+    // Header Toggle Buttons (Labels, Docked Panels, Export JSON)
+    let annotationsVisible = true;
+    const btnAnnotations = document.getElementById('btn-toggle-annotations');
+    btnAnnotations.addEventListener('click', () => {
+      annotationsVisible = !annotationsVisible;
+      annotationNodes.forEach((n) => (n.style.opacity = annotationsVisible ? '1' : '0'));
+      btnAnnotations.classList.toggle('active', annotationsVisible);
+    });
+
+    let docksVisible = true;
+    const btnDocks = document.getElementById('btn-toggle-docks');
+    const leftDock = document.getElementById('dock-left');
+    const rightDock = document.getElementById('dock-right');
+    btnDocks.addEventListener('click', () => {
+      docksVisible = !docksVisible;
+      leftDock.style.transform = docksVisible ? 'translateX(0)' : 'translateX(-100%)';
+      rightDock.style.transform = docksVisible ? 'translateX(0)' : 'translateX(100%)';
+      btnDocks.classList.toggle('active', docksVisible);
+    });
+
+    document.getElementById('btn-export-json').addEventListener('click', () => {
+      const g = evaluateCovariantMetricTensor(geodesicState.r, geodesicState.theta, physicsState.spin);
+      const payload = {
+        metric: 'Kerr (Boyer-Lindquist)',
+        signature: '(-,+,+,+)',
+        units: 'G = c = 1',
+        parameters: {
+          spin_a_star: physicsState.spin,
+          mass_solar: Math.pow(10, physicsState.logMassSolar),
+          inclination_deg: physicsState.inclinationDeg,
+          accretion_rate_eddington: physicsState.mdot
+        },
+        horizons_and_invariants: {
+          r_plus_M: physicsState.rPlus,
+          r_minus_M: physicsState.rMinus,
+          r_ISCO_M: physicsState.rISCO,
+          r_photon_prograde_M: physicsState.rPhPro,
+          r_photon_retrograde_M: physicsState.rPhRetro,
+          radiative_efficiency_eta: physicsState.etaEff,
+          horizon_angular_velocity_omegaH: physicsState.omegaH,
+          surface_gravity_kappa: physicsState.kappa
+        },
+        instantaneous_metric_tensor_covariant: g,
+        geodesic_particle_state: {
+          proper_time_tau_M: physicsState.properTimeTau,
+          r_M: geodesicState.r,
+          vr: geodesicState.vr,
+          phi_rad: geodesicState.phi,
+          Lz_M: geodesicState.Lz,
+          E_specific: geodesicState.E
+        }
+      };
+
+      const ta = document.createElement('textarea');
+      ta.value = JSON.stringify(payload, null, 2);
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+
+      const toast = document.getElementById('sci-toast');
+      toast.style.opacity = '1';
+      setTimeout(() => {
+        toast.style.opacity = '0';
+      }, 2200);
+    });
+
+    // ============================================================================
+    // 12. MAIN SCIENTIFIC SIMULATION & RENDER LOOP
+    // ============================================================================
+    syncManifoldMeshesWithPhysics();
+
+    const clock = new THREE.Clock();
+    const domProperTime = document.getElementById('status-proper-time');
+    const domCoordTime = document.getElementById('status-coord-time');
+    const domPartR = document.getElementById('readout-particle-r');
+    const domLblPartR = document.getElementById('lbl-part-r');
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const delta = Math.min(clock.getDelta(), 0.05);
+      const activeScale = physicsState.isPaused ? 0.0 : physicsState.timeScale;
+      const simDelta = delta * activeScale;
+
+      if (simDelta > 0) {
+        physicsState.properTimeTau += simDelta * 2.8;
+        const rSafe = Math.max(physicsState.rPlus * 1.03, geodesicState.r);
+        const dt_dtau = geodesicState.E / Math.max(0.08, 1.0 - 2.0 / rSafe);
+        physicsState.coordTimeM += simDelta * 2.8 * dt_dtau;
+
+        const subSteps = 6;
+        const dtau = (simDelta * 2.8) / subSteps;
+        for (let s = 0; s < subSteps; s++) {
+          stepGeodesicRK4(dtau);
+        }
+      }
+
+      const tShader = physicsState.coordTimeM * 0.22;
+      diskShaderMat.uniforms.u_time.value = tShader;
+      lensingShaderMat.uniforms.u_time.value = tShader;
+      bZJetMat.uniforms.u_time.value = tShader;
+
+      lensingBillboardMesh.lookAt(camera.position);
+      const camDir = camera.position.clone().sub(controls.target).normalize();
+      const liveIncRad = Math.acos(Math.min(0.99, Math.abs(camDir.y)));
+      lensingShaderMat.uniforms.u_inclination.value = liveIncRad;
+
+      // Update live numerical readouts
+      if (domProperTime) domProperTime.textContent = `${physicsState.properTimeTau.toFixed(2)} M`;
+      if (domCoordTime) domCoordTime.textContent = `${physicsState.coordTimeM.toFixed(2)} M`;
+      if (domPartR) domPartR.textContent = `r = ${geodesicState.r.toFixed(2)} M`;
+      if (domLblPartR) domLblPartR.textContent = `${geodesicState.r.toFixed(2)}M`;
+
+      updateLiveMetricTensorDOM();
+      renderScientificPlots();
+      controls.update();
+
+      composer.render();
+      labelRenderer.render(scene, camera);
+    }
+
+    window.addEventListener('resize', () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+      composer.setSize(w, h);
+      labelRenderer.setSize(w, h);
+    });
+
+    window.onload = function () {
+      animate();
+    };
+  </script>
+</body>
+</html>
